@@ -1,128 +1,79 @@
-import plotly.express as px
 import pandas as pd
-
-# Read the cleaned DCM data
-df = pd.read_csv('DCM_MasterData.csv')
-
-# Choose Industry (you can loop over all industries too)
-industries = df['Industry'].unique()
-
-for industry in industries:
-    fig = px.bar(
-        df[df['Industry'] == industry]
-        .sort_values(['Year', 'Rank'])
-        .groupby(['Year'])
-        .apply(lambda x: x.nsmallest(3, 'Rank'))
-        .reset_index(drop=True),
-        x='Year',
-        y='Net_Revenue_USD_m',
-        color='Bank_Parent',
-        barmode='group',
-        title=f'Top 3 Banks per Year - {industry} (DCM)',
-        text='Bank_Parent',
-        color_discrete_sequence=px.colors.qualitative.Safe
-    )
-    fig.update_traces(textposition='outside')
-    fig.update_layout(
-        xaxis=dict(type='category'),
-        yaxis_title='Net Revenue (Million USD)',
-        legend_title='Bank',
-        title_x=0.5,
-        height=600,
-        width=1000
-    )
-    fig.show()
-
-
-
-
-
-
+from plotly.subplots import make_subplots
 import plotly.graph_objects as go
+from plotly.colors import qualitative
 
-# Filter for JPMorgan and DCM
-df_jp = df[df['Bank_Parent'].str.contains('JPMorgan', case=False)]
+# 1) Load DCM data
+# df_dcm = pd.read_excel('Your_DCM_Data.xlsx', sheet_name=None)  # If from multiple sheets
+df_dcm = pd.read_csv('DCM_MasterData.csv')  # If already merged
 
-# Loop for each industry
-for industry in industries:
-    df_ind = df[df['Industry'] == industry]
-    df_jp_ind = df_jp[df_jp['Industry'] == industry]
+# 2) Clean columns
+df_dcm['Year'] = df_dcm['Year'].astype(int)
+df_dcm['Rank'] = df_dcm['Rank'].astype(int)
+df_dcm['Net Revenue USD (m)'] = pd.to_numeric(df_dcm['Net Revenue USD (m)'], errors='coerce')
 
-    industry_total = df_ind.groupby('Year')['Net_Revenue_USD_m'].sum()
-    jp_total = df_jp_ind.groupby('Year')['Net_Revenue_USD_m'].sum()
-
-    percentage = (jp_total / industry_total) * 100
-
-    fig = go.Figure()
-
-    fig.add_trace(go.Bar(
-        x=industry_total.index.astype(str),
-        y=industry_total,
-        name='Industry Total',
-        marker_color='lightgray',
-        opacity=0.6
-    ))
-
-    fig.add_trace(go.Bar(
-        x=jp_total.index.astype(str),
-        y=jp_total,
-        name='JPMorgan Revenue',
-        marker_color='blue'
-    ))
-
-    fig.add_trace(go.Scatter(
-        x=jp_total.index.astype(str),
-        y=percentage,
-        name='JPM % Share',
-        mode='lines+markers+text',
-        text=[f'{p:.1f}%' for p in percentage],
-        textposition='top center',
-        yaxis='y2',
-        line=dict(color='black', dash='dash')
-    ))
-
-    fig.update_layout(
-        title=f'JPMorgan vs Industry Total (DCM) - {industry}',
-        xaxis_title='Year',
-        yaxis_title='Revenue (Million USD)',
-        yaxis2=dict(
-            overlaying='y',
-            side='right',
-            title='% Share',
-            range=[0, 100]
-        ),
-        barmode='group',
-        legend=dict(x=0.8, y=1.2),
-        height=600,
-        width=1000
-    )
-    fig.show()
-
-
-
-
-
-
-
-# YOY % Growth
-df_jp_growth = df_jp.groupby(['Industry', 'Year'])['Net_Revenue_USD_m'].sum().reset_index()
-df_jp_growth['YOY_Growth_Percent'] = df_jp_growth.groupby('Industry')['Net_Revenue_USD_m'].pct_change() * 100
+# 3) Loop through industries
+industries = df_dcm['Industry'].unique()
 
 for industry in industries:
-    fig = px.line(
-        df_jp_growth[df_jp_growth['Industry'] == industry],
-        x='Year',
-        y='YOY_Growth_Percent',
-        markers=True,
-        title=f'JPMorgan YOY Growth % (DCM) - {industry}',
-        text='YOY_Growth_Percent'
+    df_ind = df_dcm[df_dcm['Industry'] == industry]
+
+    # 4) Get top-3 by rank per year
+    top3 = (
+        df_ind
+        .sort_values(['Year', 'Rank'])
+        .groupby('Year', as_index=False)
+        .head(3)
+        .dropna(subset=['Net Revenue USD (m)'])
     )
-    fig.update_traces(texttemplate='%{text:.2f}%', textposition='top center')
+
+    years = sorted(top3['Year'].unique())
+    n_years = len(years)
+
+    # 5) Color map for banks
+    all_banks = sorted(top3['Bank'].unique())
+    palette   = qualitative.Plotly
+    color_map = {b: palette[i % len(palette)] for i, b in enumerate(all_banks)}
+
+    # 6) Create subplots (1 row x n_years columns), shared Y-axis
+    fig = make_subplots(
+        rows=1, cols=n_years,
+        shared_yaxes=True,
+        subplot_titles=[str(y) for y in years]
+    )
+
+    # 7) Add one trace per bank-in-year
+    seen = set()
+    for col, year in enumerate(years, start=1):
+        dfy = top3[top3['Year'] == year]
+        for _, row in dfy.iterrows():
+            bank = row['Bank']
+            rev  = row['Net Revenue USD (m)']
+            fig.add_trace(
+                go.Bar(
+                    x=[bank],
+                    y=[rev],
+                    name=bank,
+                    marker_color=color_map[bank],
+                    showlegend=(bank not in seen),
+                    text=[f"${rev:,.0f}"],  # nicely formatted
+                    textposition='outside'
+                ),
+                row=1, col=col
+            )
+            seen.add(bank)
+
+    # 8) Layout tidy-up
     fig.update_layout(
-        yaxis_title='YOY Growth (%)',
-        xaxis_title='Year',
+        title_text=f"Top 3 Banks in {industry} - DCM Revenue (2020–2025)",
         title_x=0.5,
         height=500,
-        width=900
+        margin=dict(t=80, b=40, l=60, r=20),
+        bargap=0.2,  # controlled gap
+        template="plotly_white"
     )
+    fig.update_yaxes(title_text="Net Revenue (Million USD)", row=1, col=1)
+    for c in range(1, n_years+1):
+        fig.update_xaxes(title_text="", row=1, col=c)
+
     fig.show()
