@@ -1,0 +1,153 @@
+import pandas as pd
+from plotly.subplots import make_subplots
+import plotly.graph_objects as go
+from plotly.colors import qualitative
+
+# Load ECM data
+df_ecm = pd.read_csv('ECM_MasterData.csv')
+
+# Clean columns
+df_ecm['Year'] = df_ecm['Year'].astype(int)
+df_ecm['Rank'] = df_ecm['Rank'].astype(int)
+df_ecm['Net Revenue USD (m)'] = pd.to_numeric(df_ecm['Net Revenue USD (m)'], errors='coerce')
+
+# Loop through industries
+for industry in df_ecm['Industry'].unique():
+    df_ind = df_ecm[df_ecm['Industry'] == industry]
+
+    # Top-3 by rank each year
+    top3 = (
+        df_ind
+        .sort_values(['Year','Rank'])
+        .groupby('Year', as_index=False)
+        .head(3)
+        .dropna(subset=['Net Revenue USD (m)'])
+    )
+
+    years = sorted(top3['Year'].unique())
+    n_years = len(years)
+
+    # Color map
+    banks = sorted(top3['Bank'].unique())
+    palette = qualitative.Plotly
+    color_map = {b: palette[i % len(palette)] for i,b in enumerate(banks)}
+
+    # Subplots
+    fig = make_subplots(
+        rows=1, cols=n_years,
+        shared_yaxes=True,
+        subplot_titles=[str(y) for y in years]
+    )
+
+    seen = set()
+    for col, year in enumerate(years, start=1):
+        for _, r in top3[top3['Year']==year].iterrows():
+            bank = r['Bank']
+            rev  = r['Net Revenue USD (m)']
+            fig.add_trace(
+                go.Bar(
+                    x=[bank],
+                    y=[rev],
+                    name=bank,
+                    marker_color=color_map[bank],
+                    showlegend=(bank not in seen),
+                    text=[f"${rev:,.0f}"],
+                    textposition='outside'
+                ),
+                row=1, col=col
+            )
+            seen.add(bank)
+
+    fig.update_layout(
+        title_text=f"Top 3 Banks in {industry} — ECM Revenue (2020–2025)",
+        title_x=0.5,
+        height=500,
+        margin=dict(t=80,b=40,l=60,r=20),
+        bargap=0.2,
+        template="plotly_white"
+    )
+    fig.update_yaxes(title_text="Net Revenue (Million USD)", row=1, col=1)
+    for c in range(1,n_years+1):
+        fig.update_xaxes(title_text="", row=1, col=c)
+
+    fig.show()
+
+
+
+
+
+
+
+import pandas as pd
+from plotly.subplots import make_subplots
+import plotly.graph_objects as go
+from plotly.colors import qualitative
+
+# Load M&A data
+df_ma = pd.read_csv('MA_MasterData.csv')
+
+# Clean columns
+df_ma['Year'] = df_ma['Year'].astype(int)
+df_ma['Rank'] = df_ma['Rank'].astype(int)
+df_ma['Net Revenue USD (m)'] = pd.to_numeric(df_ma['Net Revenue USD (m)'], errors='coerce')
+
+# Loop through industries
+for industry in df_ma['Industry'].unique():
+    df_ind = df_ma[df_ma['Industry'] == industry]
+
+    # Top-3 by rank each year
+    top3 = (
+        df_ind
+        .sort_values(['Year','Rank'])
+        .groupby('Year', as_index=False)
+        .head(3)
+        .dropna(subset=['Net Revenue USD (m)'])
+    )
+
+    years = sorted(top3['Year'].unique())
+    n_years = len(years)
+
+    # Color map
+    banks = sorted(top3['Bank'].unique())
+    palette = qualitative.Plotly
+    color_map = {b: palette[i % len(palette)] for i,b in enumerate(banks)}
+
+    # Subplots
+    fig = make_subplots(
+        rows=1, cols=n_years,
+        shared_yaxes=True,
+        subplot_titles=[str(y) for y in years]
+    )
+
+    seen = set()
+    for col, year in enumerate(years, start=1):
+        for _, r in top3[top3['Year']==year].iterrows():
+            bank = r['Bank']
+            rev  = r['Net Revenue USD (m)']
+            fig.add_trace(
+                go.Bar(
+                    x=[bank],
+                    y=[rev],
+                    name=bank,
+                    marker_color=color_map[bank],
+                    showlegend=(bank not in seen),
+                    text=[f"${rev:,.0f}"],
+                    textposition='outside'
+                ),
+                row=1, col=col
+            )
+            seen.add(bank)
+
+    fig.update_layout(
+        title_text=f"Top 3 Banks in {industry} — M&A Revenue (2020–2025)",
+        title_x=0.5,
+        height=500,
+        margin=dict(t=80,b=40,l=60,r=20),
+        bargap=0.2,
+        template="plotly_white"
+    )
+    fig.update_yaxes(title_text="Net Revenue (Million USD)", row=1, col=1)
+    for c in range(1,n_years+1):
+        fig.update_xaxes(title_text="", row=1, col=c)
+
+    fig.show()
