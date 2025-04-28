@@ -1,0 +1,82 @@
+import pandas as pd
+from plotly.subplots import make_subplots
+import plotly.graph_objects as go
+from plotly.colors import qualitative
+
+# 1) Load & tag each product dataset
+df_dcm = pd.read_csv('DCM_MasterData.csv')
+df_dcm['Product'] = 'DCM'
+df_ecm = pd.read_csv('ECM_MasterData.csv')
+df_ecm['Product'] = 'ECM'
+df_ma = pd.read_csv('MA_MasterData.csv')
+df_ma['Product'] = 'M&A'
+
+# 2) concatenate into one
+df = pd.concat([df_dcm, df_ecm, df_ma], ignore_index=True)
+
+# 3) ensure correct types
+df['Year'] = df['Year'].astype(int)
+df['Rank'] = df['Rank'].astype(int)
+df['Net Revenue USD (m)'] = pd.to_numeric(df['Net Revenue USD (m)'], errors='coerce')
+
+# 4) loop industries
+for industry in df['Industry'].unique():
+    df_ind = df[df['Industry'] == industry]
+    
+    # 5) pick top-3 banks by average rank across all years
+    avg_rank = df_ind.groupby('Bank')['Rank'].mean().nsmallest(3)
+    top3_banks = avg_rank.index.tolist()
+    
+    # 6) filter to those banks
+    df_top3 = df_ind[df_ind['Bank'].isin(top3_banks)]
+    
+    # 7) compute productwise percentage of revenue per bank×year
+    total = (df_top3
+             .groupby(['Year','Bank'])['Net Revenue USD (m)']
+             .sum()
+             .rename('TotalRev')
+             .reset_index())
+    
+    prod = (df_top3
+            .groupby(['Year','Bank','Product'])['Net Revenue USD (m)']
+            .sum()
+            .rename('ProdRev')
+            .reset_index())
+    
+    merged = prod.merge(total, on=['Year','Bank'])
+    merged['Pct'] = merged['ProdRev'] / merged['TotalRev'] * 100
+    
+    # 8) build subplot: one row × 3 cols (banks), each stacked by product
+    fig = make_subplots(
+        rows=1, cols=3,
+        subplot_titles=top3_banks,
+        shared_yaxes=True
+    )
+    
+    colors = {'ECM':'#636EFA','DCM':'#EF553B','M&A':'#00CC96'}
+    
+    for col, bank in enumerate(top3_banks, start=1):
+        dfb = merged[merged['Bank']==bank]
+        for prod_type in ['ECM','DCM','M&A']:
+            dfp = dfb[dfb['Product']==prod_type]
+            fig.add_trace(
+                go.Bar(
+                    x=dfp['Year'],
+                    y=dfp['Pct'],
+                    name=prod_type,
+                    marker_color=colors[prod_type],
+                    showlegend=(col==1)  # legend only once
+                ),
+                row=1, col=col
+            )
+        fig.update_xaxes(title_text='Year', row=1, col=col)
+    
+    fig.update_layout(
+        title_text=f"{industry} – Top 3 Banks’ Product Mix (% of Revenue)",
+        barmode='stack',
+        height=450, width=1000,
+        legend_title_text="Product",
+        template='plotly_white'
+    )
+    fig.update_yaxes(title_text='% of Net Revenue', row=1, col=1, range=[0,100])
+    fig.show()
