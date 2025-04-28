@@ -1,0 +1,128 @@
+import plotly.express as px
+import pandas as pd
+
+# Read the cleaned DCM data
+df = pd.read_csv('DCM_MasterData.csv')
+
+# Choose Industry (you can loop over all industries too)
+industries = df['Industry'].unique()
+
+for industry in industries:
+    fig = px.bar(
+        df[df['Industry'] == industry]
+        .sort_values(['Year', 'Rank'])
+        .groupby(['Year'])
+        .apply(lambda x: x.nsmallest(3, 'Rank'))
+        .reset_index(drop=True),
+        x='Year',
+        y='Net_Revenue_USD_m',
+        color='Bank_Parent',
+        barmode='group',
+        title=f'Top 3 Banks per Year - {industry} (DCM)',
+        text='Bank_Parent',
+        color_discrete_sequence=px.colors.qualitative.Safe
+    )
+    fig.update_traces(textposition='outside')
+    fig.update_layout(
+        xaxis=dict(type='category'),
+        yaxis_title='Net Revenue (Million USD)',
+        legend_title='Bank',
+        title_x=0.5,
+        height=600,
+        width=1000
+    )
+    fig.show()
+
+
+
+
+
+
+import plotly.graph_objects as go
+
+# Filter for JPMorgan and DCM
+df_jp = df[df['Bank_Parent'].str.contains('JPMorgan', case=False)]
+
+# Loop for each industry
+for industry in industries:
+    df_ind = df[df['Industry'] == industry]
+    df_jp_ind = df_jp[df_jp['Industry'] == industry]
+
+    industry_total = df_ind.groupby('Year')['Net_Revenue_USD_m'].sum()
+    jp_total = df_jp_ind.groupby('Year')['Net_Revenue_USD_m'].sum()
+
+    percentage = (jp_total / industry_total) * 100
+
+    fig = go.Figure()
+
+    fig.add_trace(go.Bar(
+        x=industry_total.index.astype(str),
+        y=industry_total,
+        name='Industry Total',
+        marker_color='lightgray',
+        opacity=0.6
+    ))
+
+    fig.add_trace(go.Bar(
+        x=jp_total.index.astype(str),
+        y=jp_total,
+        name='JPMorgan Revenue',
+        marker_color='blue'
+    ))
+
+    fig.add_trace(go.Scatter(
+        x=jp_total.index.astype(str),
+        y=percentage,
+        name='JPM % Share',
+        mode='lines+markers+text',
+        text=[f'{p:.1f}%' for p in percentage],
+        textposition='top center',
+        yaxis='y2',
+        line=dict(color='black', dash='dash')
+    ))
+
+    fig.update_layout(
+        title=f'JPMorgan vs Industry Total (DCM) - {industry}',
+        xaxis_title='Year',
+        yaxis_title='Revenue (Million USD)',
+        yaxis2=dict(
+            overlaying='y',
+            side='right',
+            title='% Share',
+            range=[0, 100]
+        ),
+        barmode='group',
+        legend=dict(x=0.8, y=1.2),
+        height=600,
+        width=1000
+    )
+    fig.show()
+
+
+
+
+
+
+
+# YOY % Growth
+df_jp_growth = df_jp.groupby(['Industry', 'Year'])['Net_Revenue_USD_m'].sum().reset_index()
+df_jp_growth['YOY_Growth_Percent'] = df_jp_growth.groupby('Industry')['Net_Revenue_USD_m'].pct_change() * 100
+
+for industry in industries:
+    fig = px.line(
+        df_jp_growth[df_jp_growth['Industry'] == industry],
+        x='Year',
+        y='YOY_Growth_Percent',
+        markers=True,
+        title=f'JPMorgan YOY Growth % (DCM) - {industry}',
+        text='YOY_Growth_Percent'
+    )
+    fig.update_traces(texttemplate='%{text:.2f}%', textposition='top center')
+    fig.update_layout(
+        yaxis_title='YOY Growth (%)',
+        xaxis_title='Year',
+        title_x=0.5,
+        height=500,
+        width=900
+    )
+    fig.show()
